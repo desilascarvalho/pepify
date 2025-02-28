@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pepify - Busca</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">Pepify</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="navbar-nav ms-auto">
+                    <a class="nav-link active" href="{{ url_for('index') }}">Buscar</a>
+                    <a class="nav-link" href="{{ url_for('artists') }}">Artistas</a>
+                    <a class="nav-link" href="{{ url_for('config') }}">Configurações</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-5 pt-4">
+        <h1 class="mb-4">Busca de Artistas</h1>
+        {% if message %}
+            <div class="alert alert-info">{{ message }}</div>
+        {% endif %}
+        <form method="POST" action="{{ url_for('index') }}" id="searchForm" class="mb-4">
+            <div class="input-group">
+                <input type="text" name="query" id="searchQuery" class="form-control" placeholder="Digite o nome do artista" required>
+                <button type="submit" class="btn btn-primary" id="searchButton">Buscar</button>
+            </div>
+        </form>
+        <div id="autocomplete-results" class="list-group position-absolute w-100" style="display: none; z-index: 1000;"></div>
+        {% if artists %}
+            <div class="row row-cols-2 row-cols-md-4 row-cols-lg-7 g-3 artist-grid">
+                {% for artist in artists %}
+                    <div class="col">
+                        <div class="card text-center">
+                            <div class="image-placeholder" style="width: 150px; height: 150px; background-color: #f8f9fa; border-radius: 50%;"></div>
+                            <img src="{{ url_for('serve_cached_image', filename=artist.picture.split('/')[-1]) if artist.picture.startswith('/static/images/') else artist.picture }}" class="card-img-top rounded-circle" alt="Imagem do artista {{ artist.name }}" loading="lazy" onerror="this.src='https://via.placeholder.com/150'; this.classList.add('loaded');">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ artist.name }}</h5>
+                                <form method="POST">
+                                    <input type="hidden" name="artist_name" value="{{ artist.name }}">
+                                    <input type="hidden" name="action" value="monitor">
+                                    <button type="submit" class="btn btn-success btn-sm" tabindex="0" aria-label="Monitorar {{ artist.name }}">Monitorar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-muted">Nenhum artista encontrado.</p>
+        {% endif %}
+        <div id="progress-container" class="mt-4"></div>
+    </div>
+    <div id="notification-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+        <div id="notification" class="alert alert-info d-none" role="alert"></div>
+    </div>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const searchForm = document.getElementById('searchForm');
+        const searchQuery = document.getElementById('searchQuery');
+        const searchButton = document.getElementById('searchButton');
+        const autocompleteResults = document.getElementById('autocomplete-results');
+        const notification = document.getElementById('notification');
+
+        // Evitar que o autocompletar bloqueie o submit
+        searchForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const query = searchQuery.value.trim();
+            if (query) {
+                window.location.href = `{{ url_for('index') }}?query=${encodeURIComponent(query)}`;
+            }
+        });
+
+        searchQuery.addEventListener('input', async () => {
+            const query = searchQuery.value.trim();
+            if (query.length < 2) {
+                autocompleteResults.style.display = 'none';
+                return;
+            }
+
+            try {
+                const response = await fetch(`https://api.deezer.com/search/artist?q=${encodeURIComponent(query)}&limit=5`);
+                const data = await response.json();
+                autocompleteResults.innerHTML = '';
+                if (data.data && data.data.length > 0) {
+                    data.data.forEach(artist => {
+                        const item = document.createElement('a');
+                        item.className = 'list-group-item list-group-item-action';
+                        item.href = '#';
+                        item.textContent = artist.name;
+                        item.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            searchQuery.value = artist.name;
+                            autocompleteResults.style.display = 'none';
+                            searchForm.submit();
+                        });
+                        autocompleteResults.appendChild(item);
+                    });
+                    autocompleteResults.style.display = 'block';
+                } else {
+                    autocompleteResults.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Erro ao buscar sugestões:', error);
+                autocompleteResults.style.display = 'none';
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!autocompleteResults.contains(e.target) && e.target !== searchQuery && e.target !== searchButton) {
+                autocompleteResults.style.display = 'none';
+            }
+        });
+
+        const socket = io('http://localhost:8813');
+        socket.on('progress', (data) => {
+            notification.textContent = `${data.artist}: ${data.status}`;
+            notification.classList.remove('d-none');
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+                notification.classList.add('d-none');
+            }, 5000);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const images = document.querySelectorAll('.card-img-top');
+            images.forEach(img => {
+                img.addEventListener('load', () => {
+                    img.classList.add('loaded');
+                });
+                img.addEventListener('error', () => {
+                    console.error(`Erro ao carregar imagem para ${img.alt}`);
+                    img.src = 'https://via.placeholder.com/150';
+                    img.classList.add('loaded');
+                });
+            });
+        });
+    </script>
+</body>
+</html>

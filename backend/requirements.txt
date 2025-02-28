@@ -1,0 +1,14 @@
+flask
+requests
+deemix
+packaging
+click
+setproctitle
+wheel
+PlexAPI
+tqdm
+Unidecode
+eventlet
+flask-socketio
+watchdog
+pillow

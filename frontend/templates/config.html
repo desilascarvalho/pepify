@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pepify - Configurações</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">Pepify</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="navbar-nav ms-auto">
+                    <a class="nav-link" href="{{ url_for('index') }}">Buscar</a>
+                    <a class="nav-link" href="{{ url_for('artists') }}">Artistas</a>
+                    <a class="nav-link active" href="{{ url_for('config') }}">Configurações</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-5 pt-4">
+        <h1 class="mb-4">Configurações</h1>
+        <form method="POST">
+            <div class="mb-3">
+                <label for="arl" class="form-label">ARL (Deezer):</label>
+                <input type="text" name="arl" id="arl" class="form-control" value="{{ deemix_config.arl if deemix_config.arl else '' }}" style="font-size: 1rem;" required>
+            </div>
+            <div class="mb-3">
+                <label for="bitrate" class="form-label">Bitrate:</label>
+                <select name="bitrate" id="bitrate" class="form-select" style="font-size: 1rem;">
+                    <option value="128" {% if deemon_config.global.bitrate == '128' %}selected{% endif %}>128 kbps</option>
+                    <option value="320" {% if deemon_config.global.bitrate == '320' %}selected{% endif %}>320 kbps</option>
+                    <option value="FLAC" {% if deemon_config.global.bitrate == 'FLAC' %}selected{% endif %}>FLAC</option>
+                </select>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" name="darkMode" id="darkMode" class="form-check-input" {% if dark_mode %}checked{% endif %}>
+                <label class="form-check-label" for="darkMode">Modo Escuro</label>
+            </div>
+            <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.5rem; font-size: 1rem;">Salvar</button>
+        </form>
+    </div>
+    <div id="notification-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+        <div id="notification" class="alert alert-info d-none" role="alert"></div>
+    </div>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const darkModeToggle = document.getElementById('darkMode');
+        if (darkModeToggle) {
+            darkModeToggle.addEventListener('change', () => {
+                document.body.classList.toggle('dark-mode', darkModeToggle.checked);
+                fetch('/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `darkMode=${darkModeToggle.checked}&arl=${encodeURIComponent(document.getElementById('arl').value)}&bitrate=${encodeURIComponent(document.getElementById('bitrate').value)}`
+                });
+            });
+        }
+
+        const socket = io('http://localhost:8813');
+        const notification = document.getElementById('notification');
+
+        socket.on('progress', (data) => {
+            notification.textContent = `${data.artist}: ${data.status}`;
+            notification.classList.remove('d-none');
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+                notification.classList.add('d-none');
+            }, 5000);
+        });
+
+        const isDarkMode = {{ dark_mode | tojson }};
+        if (isDarkMode) {
+            document.body.classList.add('dark-mode');
+            if (darkModeToggle) darkModeToggle.checked = true;
+        }
+    </script>
+</body>
+</html>

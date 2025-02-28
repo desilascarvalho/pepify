@@ -1,0 +1,22 @@
+services:
+  pepify:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: pepify
+    ports:
+      - "8813:8813"
+    volumes:
+      - /opt/appdata/pepify/config:/root/.config/deemon
+      - /opt/appdata/pepify/deemix_config:/root/.config/deemix
+      - /mnt/unionfs/Media/Music:/downloads
+      - /opt/appdata/pepify/data:/root/data
+    environment:
+      - DEEMON_DOWNLOAD_PATH=/downloads
+    restart: unless-stopped
+    networks:
+      - grathus
+
+networks:
+  grathus:
+    driver: bridge

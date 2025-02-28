@@ -1,0 +1,19 @@
+pepify/
+├── backend/
+│   ├── app.py
+│   ├── utils/
+│   │   ├── config.py
+│   │   ├── deemon.py
+│   │   ├── deezer.py
+│   │   ├── persistence.py
+│   ├── Dockerfile
+│   └── requirements.txt
+├── frontend/
+│   ├── static/
+│   │   └── style.css
+│   └── templates/
+│       ├── index.html
+│       ├── artists.html
+│       ├── artist_detail.html
+│       └── config.html
+└── docker-compose.yml

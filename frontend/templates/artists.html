@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pepify - Artistas Monitorados</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top shadow-sm">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">Pepify</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <div class="navbar-nav ms-auto">
+                    <a class="nav-link" href="{{ url_for('index') }}">Buscar</a>
+                    <a class="nav-link active" href="{{ url_for('artists') }}">Artistas</a>
+                    <a class="nav-link" href="{{ url_for('config') }}">Configurações</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <div class="container mt-5 pt-4">
+        <h1 class="mb-4">Artistas Monitorados</h1>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-center mb-3">
+            <div class="mb-2 mb-md-0">
+                <select class="form-select form-select-sm" id="filterArtists" onchange="filterArtists()">
+                    <option value="all">Todos</option>
+                    <option value="monitoring">Monitorando</option>
+                    <option value="completed">Concluído</option>
+                    <option value="error">Erro</option>
+                </select>
+                <a href="{{ url_for('artists', sort='name', page=page) }}" class="btn btn-sm btn-outline-secondary {% if sort_by == 'name' %}active{% endif %}">Nome</a>
+                <a href="{{ url_for('artists', sort='date', page=page) }}" class="btn btn-sm btn-outline-secondary {% if sort_by == 'date' %}active{% endif %}">Data</a>
+            </div>
+            {% if total_pages > 1 %}
+                <nav aria-label="Page navigation" class="mt-2 mt-md-0">
+                    <ul class="pagination">
+                        {% if page > 1 %}
+                            <li class="page-item"><a class="page-link" href="{{ url_for('artists', sort=sort_by, page=page-1) }}">Anterior</a></li>
+                        {% endif %}
+                        {% for p in range(1, total_pages + 1) %}
+                            <li class="page-item {% if p == page %}active{% endif %}"><a class="page-link" href="{{ url_for('artists', sort=sort_by, page=p) }}">{{ p }}</a></li>
+                        {% endfor %}
+                        {% if page < total_pages %}
+                            <li class="page-item"><a class="page-link" href="{{ url_for('artists', sort=sort_by, page=page+1) }}">Próximo</a></li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            {% endif %}
+        </div>
+        {% if monitored_artists %}
+            <div class="row row-cols-2 row-cols-md-4 row-cols-lg-7 g-3 artist-grid">
+                {% for artist in monitored_artists %}
+                    <div class="col">
+                        <div class="card text-center" data-status="{{ download_status[artist.name]['status']|lower }}">
+                            <div class="image-placeholder" style="width: 150px; height: 150px; background-color: #f8f9fa; border-radius: 50%;"></div>
+                            <img src="{{ url_for('serve_cached_image', filename=artist.picture.split('/')[-1]) if artist.picture.startswith('/static/images/') else artist.picture }}" class="card-img-top rounded-circle" alt="Imagem do artista {{ artist.name }}" loading="lazy" onerror="this.src='https://via.placeholder.com/150'; this.classList.add('loaded');">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ artist.name }}</h5>
+                                <p class="card-text text-muted">Monitorado em: {{ artist.date }}</p>
+                                <a href="{{ url_for('artist_detail', artist_name=artist.name) }}" class="btn btn-primary btn-sm" tabindex="0" aria-label="Ver detalhes de {{ artist.name }}">Ver Detalhes</a>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-muted">Nenhum artista monitorado ainda.</p>
+        {% endif %}
+    </div>
+    <div id="notification-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;">
+        <div id="notification" class="alert alert-info d-none" role="alert"></div>
+    </div>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function filterArtists() {
+            const filter = document.getElementById('filterArtists').value;
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                const status = card.getAttribute('data-status') || 'completed';
+                if (filter === 'all' || status.toLowerCase() === filter.toLowerCase()) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        const socket = io('http://localhost:8813');
+        const notification = document.getElementById('notification');
+
+        socket.on('progress', (data) => {
+            notification.textContent = `${data.artist}: ${data.status}`;
+            notification.classList.remove('d-none');
+            notification.classList.add('show');
+            setTimeout(() => {
+                notification.classList.remove('show');
+                notification.classList.add('d-none');
+            }, 5000);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const images = document.querySelectorAll('.card-img-top');
+            images.forEach(img => {
+                img.addEventListener('load', () => {
+                    img.classList.add('loaded');
+                    const placeholder = img.previousElementSibling;
+                    if (placeholder) placeholder.style.display = 'none';
+                });
+                img.addEventListener('error', () => {
+                    console.error(`Erro ao carregar imagem para ${img.alt}`);
+                    img.src = 'https://via.placeholder.com/150';
+                    img.classList.add('loaded');
+                    const placeholder = img.previousElementSibling;
+                    if (placeholder) placeholder.style.display = 'none';
+                });
+            });
+        });
+    </script>
+</body>
+</html>
